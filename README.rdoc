@@ -1,0 +1,31 @@
+== Distributed Search
+
+Distributed Search performs a Google web search and round-robins those requests across a list of Searx search proxies.
+
+== Install
+
+Gemfile
+
+    gem 'distributed_search', git: 'https://817a90a552f2b4abfacd491bee2943b44d1c6be6:x-oauth-basic@github.com/aantix/distributed_search.git', branch: 'master'
+
+== Example
+
+Sample Google search:
+
+    results = DistributedSearch::DistributedSearch.new.search('dogs')
+
+    results['results'].each do |result|
+      puts result['url']
+      puts result['content'] # Summary
+    end
+
+== Notes
+
+When working with this gem locally within your Rails app, be sure to tell Bundler to use the local version.
+
+    # http://ryanbigg.com/2013/08/bundler-local-paths/
+    bundle config local.distributed_search ~/dev/distributed_search
+
+== Copyright
+
+Copyright (c) 2016 Jim Jones. See LICENSE for details.
