@@ -48,8 +48,7 @@ module DistributedSearch
           return JSON.parse(response.body)
         end
       rescue StandardError => e
-        puts "!!!! #{url}"
-        puts "!!!! #{e.message}"
+        inactivate
       end
 
       nil

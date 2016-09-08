@@ -2,58 +2,52 @@ require 'distributed_search/search_engine'
 
 module DistributedSearch
   class DistributedSearch
-    attr_reader :query, :search_engines
-    attr_accessor :current_search
+    SEARCH_ENGINES_INDEX_PAGE = 'http://stats.searx.oe5tpo.com/'
+    MAX_RETRIES               = 5
 
-    URLS = %w(
-    https://searx.me
-    https://searx.laquadrature.net
-    https://searx.volcanis.me
-    https://search.homecomputing.fr
-    https://searx.potato.hu
-    https://s3arch.eu
-    https://framabee.org
-    https://search.jpope.org
-    https://suche.elaon.de
-    https://www.searx.de
-    https://www.ready.pm/
-    https://searx.schrodinger.io
-    https://searx.nulltime.net
-    https://www.heraut.eu/search/
-    https://searx.aquilenet.fr
-    https://search.azkware.net
-    http://s.n0.is
-    https://search.alecpap.com
-    https://seeks.hsbp.org
-    https://searx.coding4schoki.org
-    https://searx.brihx.fr
-    https://search.kujiu.org
-    https://searx.info
-    https://searx.drakonix.net
-    https://searx.netzspielplatz.de
-    https://searx.32bitflo.at
-  )
+    attr_reader   :query, :agent
+    attr_accessor :current_search, :urls, :search_engines, :refreshed_at, :retries, :search_engines
 
     def initialize
-      @search_engines = []
-      init_search
+      @agent = Mechanize.new { |agent|
+        agent.user_agent_alias = 'Mac Safari'
+      }
 
-      @query          = query
-      @current_search = search_engines.shuffle.first
+      @query = query
+
+      init_search
     end
 
-    def search(query)
-      result = nil
+    def search(query, collection_key = nil)
+      self.retries = 0
+      result       = nil
+      retryy       = false
 
       begin
-        result = next_search.search(query)
-      end while result.nil?
+        self.retries+=1
+        search_engine = next_search
+
+        result  = search_engine.search(query)
+        retryy  = retry?(result, collection_key)
+
+        search_engine.inactivate if retryy
+      end while retryy
 
       result
     end
 
     private
+    def retry?(result, collection_key)
+      return false if retries > MAX_RETRIES
+      return true if result.nil?
+      return true if collection_key && result[collection_key].present? && result[collection_key].empty?
+
+      false
+    end
+
     def next_search
+      init_search if refresh_search_engines?
+
       begin
         next_search_engine = search_engines.index(self.current_search) + 1
         next_search_engine = 0 if next_search_engine == search_engines.size
@@ -64,10 +58,22 @@ module DistributedSearch
       self.current_search
     end
 
-    def init_search
-      URLS.each { |url| @search_engines << SearchEngine.new(url) }
+    def refresh_search_engines?
+      refreshed_at >= 1.hours.ago
+    end
 
-      @search_engines.reject! { |se| se.inactive? }
+    def init_search
+      self.refreshed_at   = Time.now
+      self.search_engines = []
+
+      self.urls = agent.get(SEARCH_ENGINES_INDEX_PAGE).search('.label-success').collect do |l|
+        (l.parent().parent().at('a') || {})['href']
+      end.compact
+
+      urls.each { |url| self.search_engines << SearchEngine.new(url) }
+
+      search_engines.reject! { |se| se.inactive? }
+      self.current_search = search_engines.shuffle.first
     end
 
   end
