@@ -5,15 +5,17 @@ module DistributedSearch
     SEARCH_ENGINES_INDEX_PAGE = 'http://stats.searx.oe5tpo.com/'
     MAX_RETRIES               = 5
 
-    attr_reader   :query, :agent
-    attr_accessor :current_search, :urls, :search_engines, :refreshed_at, :retries, :search_engines
+    attr_reader   :query, :agent, :debug
+    attr_accessor :current_search, :urls, :retries
 
-    def initialize
+    def initialize(debug = false)
       @agent = Mechanize.new { |agent|
         agent.user_agent_alias = 'Mac Safari'
       }
+      @debug          = debug
 
-      @query = query
+      @@search_engines||= nil
+      @query           = query
 
       init_search
     end
@@ -46,35 +48,38 @@ module DistributedSearch
     end
 
     def next_search
-      init_search if refresh_search_engines?
+      init_search(true) if refresh_search_engines?
 
       begin
-        next_search_engine = search_engines.index(self.current_search) + 1
-        next_search_engine = 0 if next_search_engine == search_engines.size
+        next_search_engine = @@search_engines.index(self.current_search) + 1
+        next_search_engine = 0 if next_search_engine == @@search_engines.size
 
-        self.current_search = search_engines.at(next_search_engine)
+        self.current_search = @@search_engines.at(next_search_engine)
       end while self.current_search.inactive?  # Only grab an active search connection
 
       self.current_search
     end
 
     def refresh_search_engines?
-      refreshed_at >= 1.hours.ago
+      @@refreshed_at && @@refreshed_at >= 1.hours.ago
     end
 
-    def init_search
-      self.refreshed_at   = Time.now
-      self.search_engines = []
+    def init_search(force_refresh = false)
+      if @@search_engines.nil? || force_refresh
+        @@refreshed_at = Time.now
 
-      self.urls = agent.get(SEARCH_ENGINES_INDEX_PAGE).search('.label-success').collect do |l|
-        (l.parent().parent().at('a') || {})['href']
-      end.compact
+        @@search_engines  = []
 
-      urls.each { |url| self.search_engines << SearchEngine.new(url) }
+        self.urls = agent.get(SEARCH_ENGINES_INDEX_PAGE).search('.label-success').collect do |l|
+          (l.parent().parent().at('a') || {})['href']
+        end.compact
 
-      search_engines.reject! { |se| se.inactive? }
-      self.current_search = search_engines.shuffle.first
+        urls.each { |url| @@search_engines << SearchEngine.new(url, @debug) }
+
+        @@search_engines.reject! { |se| se.inactive? }
+        self.current_search = @@search_engines.shuffle.first
+      end
+
     end
-
   end
 end

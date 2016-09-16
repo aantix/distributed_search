@@ -1,10 +1,11 @@
 module DistributedSearch
   class SearchEngine
-    attr_reader :url
+    attr_reader :url, :debug
     attr_accessor :active
 
-    def initialize(url)
+    def initialize(url, debug = false)
       @url    = url
+      @debug  = debug
       @active = true
     end
 
@@ -48,6 +49,10 @@ module DistributedSearch
           return JSON.parse(response.body)
         end
       rescue StandardError => e
+        puts
+        puts "!!! #{e.message[0..50]}" if debug
+        puts
+
         inactivate
       end
 
